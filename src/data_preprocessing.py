@@ -114,6 +114,11 @@ def encode_and_scale(train_df, test_df, output_dir):
     """One-hot encode categorical features and scale numerical features."""
     print_header("Encoding & Scaling")
 
+    processed_dir = os.path.join(output_dir, 'data', 'processed')
+    encoders_dir = os.path.join(output_dir, 'models', 'encoders')
+    os.makedirs(processed_dir, exist_ok=True)
+    os.makedirs(encoders_dir, exist_ok=True)
+
     # Separate features and labels
     feature_cols = [c for c in train_df.columns
                     if c not in ['label', 'attack_category',
@@ -149,12 +154,10 @@ def encode_and_scale(train_df, test_df, output_dir):
     print(f"    One-hot:   {len(cat_feature_names)}")
 
     # Save preprocessor
-    save_model(preprocessor, os.path.join(output_dir, 'encoders',
-                                          'preprocessor.pkl'))
+    save_model(preprocessor, os.path.join(encoders_dir, 'preprocessor.pkl'))
 
     # Save feature names
-    np.save(os.path.join(output_dir, 'processed', 'feature_names.npy'),
-            all_feature_names)
+    np.save(os.path.join(processed_dir, 'feature_names.npy'), all_feature_names)
 
     return X_train_processed, X_test_processed, all_feature_names
 
@@ -188,8 +191,8 @@ def run_full_pipeline(train_path, test_path, output_dir):
     # Step 5: Save everything
     print_header("Saving Processed Data")
 
-    processed_dir = os.path.join(output_dir, 'processed')
-    encoders_dir = os.path.join(output_dir, 'encoders')
+    processed_dir = os.path.join(output_dir, 'data', 'processed')
+    encoders_dir = os.path.join(output_dir, 'models', 'encoders')
     os.makedirs(processed_dir, exist_ok=True)
     os.makedirs(encoders_dir, exist_ok=True)
 
