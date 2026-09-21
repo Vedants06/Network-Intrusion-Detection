@@ -4,17 +4,6 @@ An end-to-end Machine Learning pipeline for network traffic anomaly detection, a
 
 ---
 
-## 📌 Syllabus Modules Covered
-
-- **Module 1: Machine Learning Fundamentals** — Bias-Variance Trade-off, Learning Curves, Overfitting/Underfitting.
-- **Module 2: Regression, Trees & Metrics** — Linear/Logistic Regression, CART, Gini Index, Confusion Matrix, Kappa, Sensitivity, Specificity, ROC Curves.
-- **Module 3: Ensemble Learning** — K-Fold CV, AdaBoost, XGBoost, Bagging, Subagging, Random Forest, Voting, Stacking.
-- **Module 4: Classification with SVM** — Linear, Polynomial, RBF Kernels, Support Vector Regression (SVR), Multiclass OvR/OvO.
-- **Module 5: Clustering** — Minimum Spanning Tree (MST), Expectation Maximization (GMM), DBSCAN Anomaly Detection.
-- **Module 6: Dimensionality Reduction** — Principal Component Analysis (PCA), Linear Discriminant Analysis (LDA), Singular Value Decomposition (SVD).
-
----
-
 ## 📁 Repository Structure
 
 ```
