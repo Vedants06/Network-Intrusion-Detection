@@ -86,29 +86,34 @@ plt.rcParams.update({
 # ----------------------------------------------------------------------------
 # Data / model loading
 # ----------------------------------------------------------------------------
-@st.cache_resource
-def load_all_models():
-    models = {}
-    model_files = {
-        "Logistic Regression": "logistic_regression.pkl",
-        "Decision Tree (Gini)": "decision_tree_gini.pkl",
-        "Decision Tree (CART)": "decision_tree_cart_classifier.pkl",
-        "AdaBoost": "adaboost.pkl",
-        "XGBoost": "xgboost_model.pkl",
-        "Random Forest": "random_forest.pkl",
-        "Bagging": "bagging_model.pkl",
-        "Voting (Hard)": "voting_hard.pkl",
-        "Voting (Soft)": "voting_soft.pkl",
-        "Stacking": "stacking_model.pkl",
-        "SVM Linear": "svm_linear.pkl",
-        "SVM RBF": "svm_rbf.pkl",
-        "SVM Poly": "svm_poly.pkl",
-    }
-    for name, fname in model_files.items():
-        path = os.path.join(BASE, "models", "saved_models", fname)
-        if os.path.exists(path):
-            models[name] = load_model(path)
-    return models
+MODEL_FILES = {
+    "Logistic Regression": "logistic_regression.pkl",
+    "Decision Tree (Gini)": "decision_tree_gini.pkl",
+    "Decision Tree (CART)": "decision_tree_cart_classifier.pkl",
+    "AdaBoost": "adaboost.pkl",
+    "XGBoost": "xgboost_model.pkl",
+    "Random Forest": "random_forest.pkl",
+    "Bagging": "bagging_model.pkl",
+    "Voting (Hard)": "voting_hard.pkl",
+    "Voting (Soft)": "voting_soft.pkl",
+    "Stacking": "stacking_model.pkl",
+    "SVM Linear": "svm_linear.pkl",
+    "SVM RBF": "svm_rbf.pkl",
+    "SVM Poly": "svm_poly.pkl",
+}
+# Only list models whose file actually exists on disk (cheap check, no loading).
+AVAILABLE_MODELS = {
+    name: fname for name, fname in MODEL_FILES.items()
+    if os.path.exists(os.path.join(BASE, "models", "saved_models", fname))
+}
+
+
+@st.cache_resource(show_spinner="Loading model...")
+def load_model_by_name(name):
+    """Load a single model on demand. Cached per name so re-selecting is instant,
+    but unused models are never pulled into memory."""
+    path = os.path.join(BASE, "models", "saved_models", AVAILABLE_MODELS[name])
+    return load_model(path)
 
 
 @st.cache_resource
@@ -134,7 +139,6 @@ def load_encoders():
     return load_model(os.path.join(BASE, "models", "encoders", "label_encoder_multi.pkl"))
 
 
-models = load_all_models()
 data = load_data()
 readable = load_readable_test_set()
 le = load_encoders()
@@ -162,7 +166,7 @@ page = st.sidebar.radio(
 )
 
 st.sidebar.divider()
-st.sidebar.caption(f"{len(models)} models loaded · {data['X_test'].shape[0]:,} test flows · {data['X_test'].shape[1]} features")
+st.sidebar.caption(f"{len(AVAILABLE_MODELS)} models available · {data['X_test'].shape[0]:,} test flows · {data['X_test'].shape[1]} features")
 
 
 # ----------------------------------------------------------------------------
@@ -173,7 +177,7 @@ if page == "Overview":
     st.caption("Classical ML models trained on the NSL-KDD dataset to flag malicious network traffic.")
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Models", len(models))
+    c1.metric("Models", len(AVAILABLE_MODELS))
     c2.metric("Test flows", f"{len(data['y_test_bin']):,}")
     c3.metric("Features", data["X_test"].shape[1])
     c4.metric("Attack families", len(class_names))
@@ -188,7 +192,7 @@ if page == "Overview":
         ax.set_title("Binary", fontsize=11, color=MUTED)
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
-        st.pyplot(fig, use_container_width=True)
+        st.pyplot(fig, width='stretch')
 
     with col2:
         fig, ax = plt.subplots(figsize=(5, 3.4))
@@ -198,7 +202,7 @@ if page == "Overview":
         ax.tick_params(axis="x", rotation=30)
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
-        st.pyplot(fig, use_container_width=True)
+        st.pyplot(fig, width='stretch')
 
     st.markdown("#### Modules covered")
     st.dataframe(
@@ -210,7 +214,7 @@ if page == "Overview":
             {"Module": "5", "Topic": "Clustering", "Models / Techniques": "DBSCAN, EM/GMM, MST"},
             {"Module": "6", "Topic": "Dimensionality Reduction", "Models / Techniques": "PCA, LDA, SVD"},
         ]),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
 
@@ -222,8 +226,8 @@ elif page == "Predict":
     st.title("Predict")
     st.caption("Pull a real recorded network flow from the test set and classify it — no manual feature entry required.")
 
-    selected_model = st.selectbox("Model", list(models.keys()))
-    model = models[selected_model]
+    selected_model = st.selectbox("Model", list(AVAILABLE_MODELS.keys()))
+    model = load_model_by_name(selected_model)
 
     st.markdown("##### 1 · Choose a traffic sample")
     cat_col, btn_col = st.columns([3, 1])
@@ -236,7 +240,7 @@ elif page == "Predict":
     with btn_col:
         st.write("")
         st.write("")
-        draw = st.button("🎲 New sample", use_container_width=True)
+        draw = st.button("🎲 New sample", width='stretch')
 
     if "sample_idx" not in st.session_state or draw or st.session_state.get("sample_cat") != category_choice:
         candidates = readable.index[readable["attack_category"] == category_choice].to_numpy()
@@ -327,12 +331,22 @@ elif page == "Model Comparison":
 
     metric_choice = st.selectbox("Sort by", ["F1-Score", "Accuracy", "AUC", "Kappa"])
 
-    with st.spinner("Scoring models..."):
+    precomputed_path = os.path.join(BASE, "data", "processed", "model_comparison.csv")
+    live_mode = st.toggle(
+        "Recompute live instead of using the precomputed table",
+        value=False,
+        help="Loads every model into memory and re-runs inference on the full test set. "
+             "Off by default to keep the app's memory footprint low.",
+    )
+
+    @st.cache_data(show_spinner="Scoring models (first run only, cached after)...")
+    def score_all_models(model_names, X_test, y_test_bin):
         results = []
-        for name, model in models.items():
-            preds = model.predict(data["X_test"])
-            probs = model.predict_proba(data["X_test"])[:, 1] if hasattr(model, "predict_proba") else None
-            m = compute_all_metrics(data["y_test_bin"], preds, probs)
+        for name in model_names:
+            model = load_model_by_name(name)
+            preds = model.predict(X_test)
+            probs = model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else None
+            m = compute_all_metrics(y_test_bin, preds, probs)
             results.append({
                 "Model": name,
                 "Accuracy": round(m["accuracy"], 4),
@@ -342,11 +356,20 @@ elif page == "Model Comparison":
                 "Kappa": round(m["kappa"], 4),
                 "AUC": round(m["auc"], 4),
             })
+        return pd.DataFrame(results)
 
-    df = pd.DataFrame(results).sort_values(metric_choice, ascending=False)
+    if live_mode:
+        results_df = score_all_models(tuple(AVAILABLE_MODELS.keys()), data["X_test"], data["y_test_bin"])
+    elif os.path.exists(precomputed_path):
+        results_df = pd.read_csv(precomputed_path)
+        st.caption("Showing precomputed results. Toggle above to recompute live.")
+    else:
+        results_df = score_all_models(tuple(AVAILABLE_MODELS.keys()), data["X_test"], data["y_test_bin"])
+
+    df = results_df.sort_values(metric_choice, ascending=False)
     st.dataframe(
         df.style.background_gradient(subset=[metric_choice], cmap="Blues"),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
 
@@ -357,7 +380,7 @@ elif page == "Model Comparison":
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
     plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig, width='stretch')
 
 
 # ----------------------------------------------------------------------------
@@ -379,7 +402,7 @@ elif page == "Clustering":
         fpath = os.path.join(plot_dir, fname)
         if os.path.exists(fpath):
             st.markdown(f"**{title}**")
-            st.image(fpath, use_container_width=True)
+            st.image(fpath, width='stretch')
 
 
 # ----------------------------------------------------------------------------
@@ -402,4 +425,4 @@ elif page == "Dimensionality Reduction":
         fpath = os.path.join(plot_dir, fname)
         if os.path.exists(fpath):
             st.markdown(f"**{title}**")
-            st.image(fpath, use_container_width=True)
+            st.image(fpath, width='stretch')
